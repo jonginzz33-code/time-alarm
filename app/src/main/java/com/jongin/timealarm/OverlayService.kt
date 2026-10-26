@@ -304,7 +304,7 @@ class OverlayService : Service() {
             val startBtn = chip("시작", 0xFFC0392B.toInt()) { startTimer(i) }
             startBtn.setOnLongClickListener {
                 Store.reset(this@OverlayService, i)
-                toast("${b.name} 리셋")
+                buzz(this@OverlayService, 40)
                 onTick()
                 true
             }
@@ -326,16 +326,15 @@ class OverlayService : Service() {
             b.due <= now -> 0
             else -> 1
         }
-        return l.withIndex()
-            .filter { it.value.show && it.value.name.isNotBlank() }
+        val shown = l.withIndex().filter { it.value.show && it.value.name.isNotBlank() }
+        if (!Store.sortByTime(this)) return shown   // 정렬 끔: 목록 번호 순서
+        return shown
             .sortedWith(compareBy<IndexedValue<Slot>>({ rank(it.value) }, { it.value.due }, { it.index }))
     }
 
     private fun startTimer(i: Int) {
         if (Store.startTimer(this, i)) {
             buzz(this, 60)
-            val b = Store.load(this)[i]
-            toast("${b.name} 시작! ${fmtDur(b.secs)} 후 완료")
         } else {
             toast("주기가 없습니다. 앱에서 입력하세요")
         }
@@ -382,7 +381,7 @@ class OverlayService : Service() {
                     }
                     tv.setTextColor(
                         when (level) {
-                            2 -> 0xFFFF5252.toInt()
+                            2 -> Color.WHITE              // 빨간 배경 위에서는 흰 글씨가 잘 보임
                             1 -> 0xFFFFD54F.toInt()
                             else -> Color.WHITE
                         }
@@ -393,9 +392,9 @@ class OverlayService : Service() {
             if (nm != null && row != null) {
                 when (level) {
                     2 -> {
-                        nm.setTextColor(0xFFFF5252.toInt())
+                        nm.setTextColor(Color.WHITE)
                         val on = now % 2 == 0L
-                        row.setBackgroundColor(if (on) 0x66FF1744 else 0x22FF1744)
+                        row.setBackgroundColor(if (on) 0xDDE53935.toInt() else 0x55E53935)
                     }
                     1 -> {
                         nm.setTextColor(0xFFFFD54F.toInt())

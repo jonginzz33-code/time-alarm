@@ -102,6 +102,7 @@ object Store {
     fun vibMin(c: Context): Int = p(c).getInt("vibMin", 5)
     fun vibSec(c: Context): Int = p(c).getInt("vibSec", 30)
     fun scale(c: Context): Int = p(c).getInt("scale", 50)
+    fun sortByTime(c: Context): Boolean = p(c).getBoolean("sortByTime", true)
     fun hlMin(c: Context): Int = p(c).getInt("hlMin", 5)    // 노란 강조 시작 (분 전)
     fun hlSec(c: Context): Int = p(c).getInt("hlSec", 30)   // 빨간 깜빡임 시작 (초 전)
     fun width(c: Context): Int = p(c).getInt("width", 150)

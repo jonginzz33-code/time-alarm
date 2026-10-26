@@ -202,6 +202,18 @@ class MainActivity : Activity() {
             OverlayService.instance?.applyStyle()
         }
 
+        // 슬롯바 정렬
+        val sortCb = CheckBox(this)
+        sortCb.text = "남은 시간이 적은 순서로 정렬"
+        sortCb.textSize = 15f
+        sortCb.isChecked = Store.sortByTime(this)
+        sortCb.setOnCheckedChangeListener { _, on ->
+            Store.p(this@MainActivity).edit().putBoolean("sortByTime", on).apply()
+            OverlayService.instance?.refreshNow()
+        }
+        root.addView(sortCb)
+        root.addView(label("끄면 목록 번호 순서(1, 2, 3…)대로 보여요.", 12f, 0))
+
         // 슬롯바 이름 강조 시간
         root.addView(label("✨ 이름 강조 시간", 15f, 14))
         val hy = row()
