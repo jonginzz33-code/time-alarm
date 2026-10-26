@@ -2,15 +2,20 @@ package com.jongin.bosstimer
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.text.Editable
 import android.text.InputType
+import android.text.TextWatcher
 import android.view.Gravity
 import android.widget.Button
 import android.widget.CheckBox
@@ -20,18 +25,26 @@ import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
-import org.json.JSONObject
 
 class MainActivity : Activity() {
     private val ui = Handler(Looper.getMainLooper())
     private lateinit var root: LinearLayout
+    private val states = HashMap<Int, TextView>()
+    private val WC = LinearLayout.LayoutParams.WRAP_CONTENT
+
+    private val ticker = object : Runnable {
+        override fun run() {
+            updateStates()
+            ui.postDelayed(this, 1000)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val sv = ScrollView(this)
         root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
-        root.setPadding(dp(16), dp(28), dp(16), dp(40))
+        root.setPadding(dp(14), dp(24), dp(14), dp(40))
         sv.addView(root)
         setContentView(sv)
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -44,145 +57,65 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         render()
+        ui.removeCallbacks(ticker)
+        ui.post(ticker)
     }
 
-    private fun label(t: String, size: Float = 14f): TextView {
+    override fun onPause() {
+        super.onPause()
+        ui.removeCallbacks(ticker)
+    }
+
+    // ---------- 작은 도우미들 ----------
+    private fun label(t: String, size: Float = 14f, top: Int = 10): TextView {
         val v = TextView(this)
         v.text = t
         v.textSize = size
-        v.setPadding(0, dp(12), 0, dp(4))
+        v.setPadding(0, dp(top), 0, dp(4))
         return v
     }
 
-    private fun render() {
-        root.removeAllViews()
-        if (Cfg.token(this).isEmpty()) loginView() else mainView()
+    private fun section(t: String): TextView {
+        val v = label(t, 18f, 22)
+        v.setTypeface(null, Typeface.BOLD)
+        return v
     }
 
-    // ---------- 로그인 화면 ----------
-    private fun loginView() {
-        root.addView(label("⚔ 보스 타이머", 24f))
+    private fun text(t: String): TextView {
+        val v = TextView(this)
+        v.text = t
+        v.textSize = 14f
+        return v
+    }
 
-        val url = EditText(this)
-        url.hint = "서버 주소"
-        url.setSingleLine()
-        url.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-        url.setText(Cfg.url(this))
+    private fun row(): LinearLayout {
+        val r = LinearLayout(this)
+        r.orientation = LinearLayout.HORIZONTAL
+        r.gravity = Gravity.CENTER_VERTICAL
+        return r
+    }
 
-        val id = EditText(this)
-        id.hint = "아이디"
-        id.setSingleLine()
-        id.setText(Cfg.p(this).getString("lastid", "") ?: "")
-
-        val pw = EditText(this)
-        pw.hint = "비밀번호"
-        pw.setSingleLine()
-        pw.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-
-        val msg = TextView(this)
-        msg.setTextColor(0xFFC62828.toInt())
-
-        val btn = Button(this)
-        btn.text = "로그인"
-
-        root.addView(label("서버 주소 (터널 주소가 바뀌면 여기를 고치세요)"))
-        root.addView(url)
-        root.addView(label("아이디"))
-        root.addView(id)
-        root.addView(label("비밀번호"))
-        root.addView(pw)
-        root.addView(btn)
-        root.addView(msg)
-
-        btn.setOnClickListener {
-            val u = Api.normalize(url.text.toString())
-            val uid = id.text.toString().trim()
-            val upw = pw.text.toString()
-            Cfg.p(this@MainActivity).edit().putString("url", u).putString("lastid", uid).apply()
-            btn.isEnabled = false
-            msg.text = "로그인 중..."
-            Thread {
-                val r = Api.call(
-                    this@MainActivity, "POST", "/api/login",
-                    JSONObject().put("id", uid).put("pw", upw), token = ""
-                )
-                ui.post {
-                    btn.isEnabled = true
-                    if (r.code == 200) {
-                        Cfg.p(this@MainActivity).edit()
-                            .putString("token", r.json.optString("token"))
-                            .putString("me", r.json.optString("id"))
-                            .putBoolean("admin", r.json.optBoolean("admin"))
-                            .apply()
-                        render()
-                    } else {
-                        msg.text = r.json.optString("error", "오류 (${r.code})")
-                    }
-                }
-            }.start()
+    private fun watcher(f: (String) -> Unit): TextWatcher = object : TextWatcher {
+        override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+        override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+        override fun afterTextChanged(s: Editable?) {
+            f(s?.toString() ?: "")
         }
     }
 
-    // ---------- 메인 화면 ----------
-    private fun mainView() {
-        val top = LinearLayout(this)
-        top.orientation = LinearLayout.HORIZONTAL
-        top.gravity = Gravity.CENTER_VERTICAL
-        val who = TextView(this)
-        who.text = "⚔ ${Cfg.me(this)}님" + (if (Cfg.admin(this)) " (관리자)" else "")
-        who.textSize = 18f
-        who.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        val out = Button(this)
-        out.text = "로그아웃"
-        out.setOnClickListener { logout() }
-        top.addView(who)
-        top.addView(out)
-        root.addView(top)
-
-        if (!Settings.canDrawOverlays(this)) {
-            val perm = Button(this)
-            perm.text = "① '다른 앱 위에 표시' 권한 허용"
-            perm.setOnClickListener {
-                startActivity(
-                    Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:$packageName")
-                    )
-                )
-            }
-            root.addView(perm)
-        }
-
-        val tg = Button(this)
-        tg.text = if (OverlayService.running) "오버레이 끄기" else "오버레이 켜기 (게임 위에 표시)"
-        tg.setOnClickListener { toggleOverlay() }
-        root.addView(tg)
-
-        seek("투명도 (낮을수록 투명)", 20, 100, Cfg.alpha(this), "%") {
-            Cfg.p(this@MainActivity).edit().putInt("alpha", it).apply()
-            OverlayService.instance?.applyStyle()
-        }
-        seek("가로 크기", 160, 420, Cfg.width(this), "dp") {
-            Cfg.p(this@MainActivity).edit().putInt("width", it).apply()
-            OverlayService.instance?.applyStyle()
-        }
-
-        root.addView(label("표시할 보스 선택", 16f))
-        val hint = TextView(this)
-        hint.text = "불러오는 중..."
-        root.addView(hint)
-        val box = LinearLayout(this)
-        box.orientation = LinearLayout.VERTICAL
-        root.addView(box)
-        val rf = Button(this)
-        rf.text = "목록 새로고침"
-        rf.setOnClickListener { loadBosses(hint, box) }
-        root.addView(rf)
-        loadBosses(hint, box)
+    private fun numField(v: Int, widthDp: Int, hint: String, onChange: (Int) -> Unit): EditText {
+        val e = EditText(this)
+        e.inputType = InputType.TYPE_CLASS_NUMBER
+        e.setSingleLine()
+        e.hint = hint
+        e.setText(if (v > 0) v.toString() else "")
+        e.layoutParams = LinearLayout.LayoutParams(dp(widthDp), WC)
+        e.addTextChangedListener(watcher { onChange(it.trim().toIntOrNull() ?: 0) })
+        return e
     }
 
     private fun seek(title: String, min: Int, max: Int, cur: Int, unit: String, onSet: (Int) -> Unit) {
-        val lab = label("$title: $cur$unit")
+        val lab = label("$title: $cur$unit", 14f, 8)
         val sb = SeekBar(this)
         sb.max = max - min
         sb.progress = (cur - min).coerceIn(0, max - min)
@@ -200,6 +133,193 @@ class MainActivity : Activity() {
         root.addView(sb)
     }
 
+    private fun edit(i: Int, f: (Boss) -> Unit) {
+        val l = Store.load(this)
+        f(l[i])
+        Store.save(this, l)
+        OverlayService.instance?.refreshNow()
+    }
+
+    private fun toast(t: String) {
+        Toast.makeText(this, t, Toast.LENGTH_SHORT).show()
+    }
+
+    // ---------- 화면 ----------
+    private fun render() {
+        root.removeAllViews()
+        states.clear()
+
+        root.addView(label("⚔ 보스 타이머", 24f, 0))
+
+        if (!Settings.canDrawOverlays(this)) {
+            val perm = Button(this)
+            perm.text = "① '다른 앱 위에 표시' 권한 허용"
+            perm.setOnClickListener {
+                startActivity(
+                    Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+                )
+            }
+            root.addView(perm)
+        }
+
+        val tg = Button(this)
+        tg.text = if (OverlayService.running) "게임 위 창 끄기" else "게임 위 창 켜기"
+        tg.setOnClickListener { toggleOverlay() }
+        root.addView(tg)
+
+        // 진동 알림
+        root.addView(section("📳 진동 알림"))
+        val vcb = CheckBox(this)
+        vcb.text = "진동 알림 사용"
+        vcb.textSize = 16f
+        vcb.isChecked = Store.vib(this)
+        vcb.setOnCheckedChangeListener { _, on -> Store.p(this@MainActivity).edit().putBoolean("vib", on).apply() }
+        root.addView(vcb)
+
+        val vr = row()
+        vr.addView(numField(Store.vibMin(this), 70, "분") {
+            Store.p(this@MainActivity).edit().putInt("vibMin", it).apply()
+        })
+        vr.addView(text("분 전     "))
+        vr.addView(numField(Store.vibSec(this), 70, "초") {
+            Store.p(this@MainActivity).edit().putInt("vibSec", it).apply()
+        })
+        vr.addView(text("초 전"))
+        root.addView(vr)
+        root.addView(
+            label(
+                "비워 두거나 0이면 그 알림은 꺼져요. 체크한 보스만 알림이 오고, 게임 위 창이 켜져 있어야 동작해요.",
+                12f, 2
+            )
+        )
+
+        // 게임 위 창
+        root.addView(section("🪟 게임 위 창"))
+        seek("크기 배율 (글자·버튼)", 30, 100, Store.scale(this), "%") {
+            Store.p(this@MainActivity).edit().putInt("scale", it).apply()
+            OverlayService.instance?.rebuildAll()
+        }
+        seek("가로 폭", 80, 420, Store.width(this), "dp") {
+            Store.p(this@MainActivity).edit().putInt("width", it).apply()
+            OverlayService.instance?.applyStyle()
+        }
+        seek("투명도 (낮을수록 투명)", 20, 100, Store.alpha(this), "%") {
+            Store.p(this@MainActivity).edit().putInt("alpha", it).apply()
+            OverlayService.instance?.applyStyle()
+        }
+
+        // 보스 목록
+        root.addView(section("👹 보스 목록 (15칸)"))
+        root.addView(
+            label(
+                "이름과 젠타임(분)을 넣으면 자동 저장돼요. 왼쪽을 체크한 보스만 게임 위에 표시돼요.",
+                12f, 2
+            )
+        )
+        val list = Store.load(this)
+        for (i in 0 until SLOTS) addBossRow(i, list[i])
+
+        val all = Button(this)
+        all.text = "전체 타이머 초기화"
+        all.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setMessage("모든 보스의 타이머를 초기화할까요?\n(이름과 젠타임은 그대로 남아요)")
+                .setPositiveButton("초기화") { _, _ ->
+                    val l = Store.load(this@MainActivity)
+                    for (b in l) b.spawn = 0
+                    Store.save(this@MainActivity, l)
+                    updateStates()
+                    OverlayService.instance?.refreshNow()
+                }
+                .setNegativeButton("취소", null)
+                .show()
+        }
+        root.addView(all)
+
+        updateStates()
+    }
+
+    private fun addBossRow(i: Int, b: Boss) {
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(dp(6), dp(4), dp(6), dp(4))
+        val bg = GradientDrawable()
+        bg.setStroke(dp(1), 0xFFDDDDDD.toInt())
+        bg.cornerRadius = dp(8).toFloat()
+        box.background = bg
+        val m = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, WC)
+        m.topMargin = dp(6)
+        box.layoutParams = m
+
+        val r1 = row()
+        val show = CheckBox(this)
+        show.isChecked = b.show
+        show.setOnCheckedChangeListener { _, on -> edit(i) { it.show = on } }
+
+        val num = text("${i + 1}.")
+        num.setPadding(0, 0, dp(4), 0)
+
+        val name = EditText(this)
+        name.hint = "보스 이름"
+        name.setSingleLine()
+        name.setText(b.name)
+        name.layoutParams = LinearLayout.LayoutParams(0, WC, 1f)
+        name.addTextChangedListener(watcher { s -> edit(i) { it.name = s.trim() } })
+
+        val min = numField(b.minutes, 70, "젠") { v -> edit(i) { it.minutes = v } }
+
+        r1.addView(show)
+        r1.addView(num)
+        r1.addView(name)
+        r1.addView(min)
+        r1.addView(text("분"))
+
+        val r2 = row()
+        val st = TextView(this)
+        st.textSize = 13f
+        st.layoutParams = LinearLayout.LayoutParams(0, WC, 1f)
+        st.setPadding(dp(6), 0, 0, 0)
+        states[i] = st
+
+        val k = Button(this)
+        k.text = "처치"
+        k.setOnClickListener {
+            if (Store.kill(this@MainActivity, i)) {
+                val bb = Store.load(this@MainActivity)[i]
+                toast("${bb.name} 처치! ${bb.minutes}분 후 젠")
+            } else {
+                toast("이름과 젠타임(분)을 먼저 입력하세요")
+            }
+            updateStates()
+            OverlayService.instance?.refreshNow()
+        }
+
+        val rs = Button(this)
+        rs.text = "리셋"
+        rs.setOnClickListener {
+            Store.reset(this@MainActivity, i)
+            updateStates()
+            OverlayService.instance?.refreshNow()
+        }
+
+        r2.addView(st)
+        r2.addView(k)
+        r2.addView(rs)
+
+        box.addView(r1)
+        box.addView(r2)
+        root.addView(box)
+    }
+
+    private fun updateStates() {
+        if (states.isEmpty()) return
+        val l = Store.load(this)
+        val now = nowSec()
+        for ((i, tv) in states) {
+            tv.text = stateText(l[i], now)
+        }
+    }
+
     private fun toggleOverlay() {
         if (OverlayService.running) {
             stopService(Intent(this, OverlayService::class.java))
@@ -212,51 +332,5 @@ class MainActivity : Activity() {
             if (Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
         }
         ui.postDelayed({ render() }, 500)
-    }
-
-    private fun logout() {
-        stopService(Intent(this, OverlayService::class.java))
-        val t = Cfg.token(this)
-        Cfg.p(this).edit().putString("token", "").apply()
-        Thread { Api.call(this@MainActivity, "POST", "/api/logout", token = t) }.start()
-        render()
-    }
-
-    private fun loadBosses(hint: TextView, box: LinearLayout) {
-        hint.text = "불러오는 중..."
-        Thread {
-            val r = Api.call(this@MainActivity, "GET", "/api/bosses")
-            ui.post {
-                if (r.code == 401) {
-                    Cfg.p(this@MainActivity).edit().putString("token", "").apply()
-                    render()
-                } else if (r.code != 200) {
-                    hint.text = r.json.optString("error", "서버 연결 실패") +
-                        " (서버 주소와 터널이 켜져 있는지 확인하세요)"
-                } else {
-                    box.removeAllViews()
-                    val list = parseBosses(r.json).filter { it.name.isNotBlank() }
-                    hint.text = if (list.isEmpty()) {
-                        "등록된 보스가 없습니다. 관리자가 웹에서 보스를 등록하세요."
-                    } else {
-                        "체크한 보스만 게임 위에 표시됩니다."
-                    }
-                    val sel = Cfg.sel(this@MainActivity)
-                    for (b in list) {
-                        val cb = CheckBox(this@MainActivity)
-                        cb.text = "${b.slot}. ${b.name}  (${b.minutes}분)"
-                        cb.textSize = 16f
-                        cb.isChecked = b.slot in sel
-                        cb.setOnCheckedChangeListener { _, on ->
-                            val s = Cfg.sel(this@MainActivity).toMutableSet()
-                            if (on) s.add(b.slot) else s.remove(b.slot)
-                            Cfg.setSel(this@MainActivity, s)
-                            OverlayService.instance?.refreshNow()
-                        }
-                        box.addView(cb)
-                    }
-                }
-            }
-        }.start()
     }
 }
