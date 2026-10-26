@@ -212,7 +212,7 @@ class MainActivity : Activity() {
         root.addView(section("👹 보스 목록 (15칸)"))
         root.addView(
             label(
-                "이름과 젠타임(분)을 넣으면 자동 저장돼요. 왼쪽을 체크한 보스만 게임 위에 표시돼요.",
+                "이름과 젠타임(시간·분·초)을 넣으면 자동 저장돼요. 왼쪽을 체크한 보스만 게임 위에 표시돼요.",
                 12f, 2
             )
         )
@@ -266,13 +266,30 @@ class MainActivity : Activity() {
         name.layoutParams = LinearLayout.LayoutParams(0, WC, 1f)
         name.addTextChangedListener(watcher { s -> edit(i) { it.name = s.trim() } })
 
-        val min = numField(b.minutes, 70, "젠") { v -> edit(i) { it.minutes = v } }
-
         r1.addView(show)
         r1.addView(num)
         r1.addView(name)
-        r1.addView(min)
-        r1.addView(text("분"))
+
+        // 젠타임: 시 / 분 / 초
+        val rt = row()
+        rt.setPadding(dp(8), 0, 0, 0)
+        var upd: () -> Unit = {}
+        val hf = numField(b.secs / 3600, 60, "0") { upd() }
+        val mf = numField(b.secs % 3600 / 60, 56, "0") { upd() }
+        val sf = numField(b.secs % 60, 56, "0") { upd() }
+        upd = {
+            val h = hf.text.toString().trim().toIntOrNull() ?: 0
+            val m = mf.text.toString().trim().toIntOrNull() ?: 0
+            val s = sf.text.toString().trim().toIntOrNull() ?: 0
+            edit(i) { it.secs = h * 3600 + m * 60 + s }
+        }
+        rt.addView(text("젠타임 "))
+        rt.addView(hf)
+        rt.addView(text("시간 "))
+        rt.addView(mf)
+        rt.addView(text("분 "))
+        rt.addView(sf)
+        rt.addView(text("초"))
 
         val r2 = row()
         val st = TextView(this)
@@ -286,9 +303,9 @@ class MainActivity : Activity() {
         k.setOnClickListener {
             if (Store.kill(this@MainActivity, i)) {
                 val bb = Store.load(this@MainActivity)[i]
-                toast("${bb.name} 처치! ${bb.minutes}분 후 젠")
+                toast("${bb.name} 처치! ${fmtDur(bb.secs)} 후 젠")
             } else {
-                toast("이름과 젠타임(분)을 먼저 입력하세요")
+                toast("이름과 젠타임을 먼저 입력하세요")
             }
             updateStates()
             OverlayService.instance?.refreshNow()
@@ -307,6 +324,7 @@ class MainActivity : Activity() {
         r2.addView(rs)
 
         box.addView(r1)
+        box.addView(rt)
         box.addView(r2)
         root.addView(box)
     }

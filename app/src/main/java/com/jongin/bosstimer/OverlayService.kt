@@ -279,7 +279,7 @@ class OverlayService : Service() {
             nm.ellipsize = TextUtils.TruncateAt.END
 
             val info = TextView(this)
-            info.text = if (b.spawn > 0) "${fmtClock(b.spawn)} 젠" else "${b.minutes}분"
+            info.text = if (b.spawn > 0) "${fmtClock(b.spawn)} 젠" else fmtDur(b.secs)
             info.setTextColor(0xFFAAAAAA.toInt())
             info.textSize = 11f * s
             info.maxLines = 1
@@ -313,7 +313,7 @@ class OverlayService : Service() {
     private fun kill(i: Int) {
         if (Store.kill(this, i)) {
             val b = Store.load(this)[i]
-            toast("${b.name} 처치! ${b.minutes}분 후 젠")
+            toast("${b.name} 처치! ${fmtDur(b.secs)} 후 젠")
         } else {
             toast("젠타임이 없습니다. 앱에서 입력하세요")
         }
@@ -323,7 +323,7 @@ class OverlayService : Service() {
     private fun onTick() {
         if (!added) return
         val l = Store.load(this)
-        val sg = l.joinToString("|") { "${it.name},${it.minutes},${it.spawn},${it.show}" }
+        val sg = l.joinToString("|") { "${it.name},${it.secs},${it.spawn},${it.show}" }
         if (sg != sig) {
             sig = sg
             fill(l)

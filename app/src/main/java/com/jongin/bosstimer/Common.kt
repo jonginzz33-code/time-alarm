@@ -21,7 +21,7 @@ fun nowSec(): Long = System.currentTimeMillis() / 1000
 
 class Boss(
     var name: String = "",
-    var minutes: Int = 0,
+    var secs: Int = 0,          // 젠타임 (초 단위)
     var spawn: Long = 0,
     var show: Boolean = false
 )
@@ -36,9 +36,11 @@ object Store {
             val a = JSONArray(s)
             for (i in 0 until minOf(a.length(), SLOTS)) {
                 val o = a.getJSONObject(i)
+                // 예전 버전(분 단위) 데이터도 그대로 불러오기
+                val secs = if (o.has("secs")) o.optInt("secs") else o.optInt("minutes") * 60
                 out[i] = Boss(
                     o.optString("name"),
-                    o.optInt("minutes"),
+                    secs,
                     o.optLong("spawn"),
                     o.optBoolean("show")
                 )
@@ -54,7 +56,7 @@ object Store {
             a.put(
                 JSONObject()
                     .put("name", b.name)
-                    .put("minutes", b.minutes)
+                    .put("secs", b.secs)
                     .put("spawn", b.spawn)
                     .put("show", b.show)
             )
@@ -62,12 +64,12 @@ object Store {
         p(c).edit().putString("bosses", a.toString()).apply()
     }
 
-    /** 처치: 지금 시각 + 젠타임(분)을 다음 젠 시각으로 저장 */
+    /** 처치: 지금 시각 + 젠타임(초)을 다음 젠 시각으로 저장 */
     fun kill(c: Context, i: Int): Boolean {
         val l = load(c)
         val b = l[i]
-        if (b.name.isBlank() || b.minutes <= 0) return false
-        b.spawn = nowSec() + b.minutes * 60L
+        if (b.name.isBlank() || b.secs <= 0) return false
+        b.spawn = nowSec() + b.secs.toLong()
         save(c, l)
         return true
     }
@@ -96,11 +98,24 @@ fun fmtLeft(r: Long): String {
     else String.format(Locale.US, "%02d:%02d", m, s)
 }
 
+/** 젠타임을 "5시간 33분 30초"처럼 표시 (0인 단위는 생략) */
+fun fmtDur(sec: Int): String {
+    if (sec <= 0) return "0초"
+    val h = sec / 3600
+    val m = sec % 3600 / 60
+    val s = sec % 60
+    val parts = ArrayList<String>()
+    if (h > 0) parts.add("${h}시간")
+    if (m > 0) parts.add("${m}분")
+    if (s > 0) parts.add("${s}초")
+    return parts.joinToString(" ")
+}
+
 fun fmtClock(ts: Long): String {
     val d = Date(ts * 1000)
     val day = SimpleDateFormat("yyyyMMdd", Locale.KOREA)
-    return if (day.format(d) == day.format(Date())) SimpleDateFormat("HH:mm", Locale.KOREA).format(d)
-    else SimpleDateFormat("M/d HH:mm", Locale.KOREA).format(d)
+    return if (day.format(d) == day.format(Date())) SimpleDateFormat("HH:mm:ss", Locale.KOREA).format(d)
+    else SimpleDateFormat("M/d HH:mm:ss", Locale.KOREA).format(d)
 }
 
 fun stateText(b: Boss, now: Long): String {
