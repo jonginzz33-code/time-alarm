@@ -101,7 +101,7 @@ class OverlayService : Service() {
         )
         val nb: Notification.Builder =
             if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, ch) else Notification.Builder(this)
-        nb.setContentTitle("보스 타이머 실행 중")
+        nb.setContentTitle("시간알림 실행 중")
         nb.setContentText("눌러서 설정 열기")
         nb.setSmallIcon(android.R.drawable.ic_menu_recent_history)
         nb.setContentIntent(pi)
@@ -312,6 +312,7 @@ class OverlayService : Service() {
 
     private fun kill(i: Int) {
         if (Store.kill(this, i)) {
+            buzz(this, 60)
             val b = Store.load(this)[i]
             toast("${b.name} 처치! ${fmtDur(b.secs)} 후 젠")
         } else {
@@ -352,26 +353,25 @@ class OverlayService : Service() {
         }
     }
 
-    /** 체크된 보스만, 설정한 분 전 / 초 전에 한 번씩 진동 */
+    /** '알림' 체크한 보스만, 설정한 분 전 / 초 전에 길게 한 번 진동 */
     private fun checkAlerts(l: List<Boss>) {
-        if (!Store.vib(this)) return
         val now = nowSec()
         val vm = Store.vibMin(this)
         val vs = Store.vibSec(this)
         for ((i, b) in l.withIndex()) {
-            if (!b.show || b.name.isBlank() || b.spawn <= 0) continue
+            if (!b.alarm || b.name.isBlank() || b.spawn <= 0) continue
             val r = b.spawn - now
-            if (vm > 0) fire(i, b, "m", r, vm * 60L, "${b.name} ${vm}분 전", longArrayOf(0, 500, 200, 500))
-            if (vs > 0) fire(i, b, "s", r, vs.toLong(), "${b.name} ${vs}초 전", longArrayOf(0, 300, 150, 300, 150, 300))
+            if (vm > 0) fire(i, b, "m", r, vm * 60L, "${b.name} ${vm}분 전")
+            if (vs > 0) fire(i, b, "s", r, vs.toLong(), "${b.name} ${vs}초 전")
         }
     }
 
-    private fun fire(i: Int, b: Boss, tag: String, r: Long, thr: Long, msg: String, pattern: LongArray) {
+    private fun fire(i: Int, b: Boss, tag: String, r: Long, thr: Long, msg: String) {
         // 기준 시각을 막 지난 5초 안에서만 울림 (앱을 늦게 켰을 때 지난 알림이 한꺼번에 울리지 않게)
         if (r <= thr && r > thr - 5) {
             val key = "$i:${b.spawn}:$tag"
             if (fired.add(key)) {
-                vibrate(this, pattern)
+                buzz(this, 1500)
                 toast(msg)
             }
         }

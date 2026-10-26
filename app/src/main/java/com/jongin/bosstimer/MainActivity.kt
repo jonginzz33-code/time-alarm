@@ -149,7 +149,7 @@ class MainActivity : Activity() {
         root.removeAllViews()
         states.clear()
 
-        root.addView(label("⚔ 보스 타이머", 24f, 0))
+        root.addView(label("⏰ 시간알림", 24f, 0))
 
         if (!Settings.canDrawOverlays(this)) {
             val perm = Button(this)
@@ -168,13 +168,7 @@ class MainActivity : Activity() {
         root.addView(tg)
 
         // 진동 알림
-        root.addView(section("📳 진동 알림"))
-        val vcb = CheckBox(this)
-        vcb.text = "진동 알림 사용"
-        vcb.textSize = 16f
-        vcb.isChecked = Store.vib(this)
-        vcb.setOnCheckedChangeListener { _, on -> Store.p(this@MainActivity).edit().putBoolean("vib", on).apply() }
-        root.addView(vcb)
+        root.addView(section("📳 진동 알림 시간"))
 
         val vr = row()
         vr.addView(numField(Store.vibMin(this), 70, "분") {
@@ -188,7 +182,7 @@ class MainActivity : Activity() {
         root.addView(vr)
         root.addView(
             label(
-                "비워 두거나 0이면 그 알림은 꺼져요. 체크한 보스만 알림이 오고, 게임 위 창이 켜져 있어야 동작해요.",
+                "비워 두거나 0이면 그 알림은 꺼져요. 보스마다 젠타임 오른쪽 '알림'을 체크한 보스만 길게 한 번 울려요. 게임 위 창이 켜져 있어야 동작해요.",
                 12f, 2
             )
         )
@@ -209,7 +203,31 @@ class MainActivity : Activity() {
         }
 
         // 보스 목록
-        root.addView(section("👹 보스 목록 (15칸)"))
+        val bh = row()
+        val bt = section("👹 보스 목록 (15칸)")
+        bt.layoutParams = LinearLayout.LayoutParams(0, WC, 1f)
+        val rb = Button(this)
+        rb.text = "리붓"
+        rb.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setMessage("저장된 모든 보스를 지금 처치한 것으로 할까요?")
+                .setPositiveButton("리붓") { _, _ ->
+                    val n = Store.killAll(this@MainActivity)
+                    if (n > 0) {
+                        buzz(this@MainActivity, 60)
+                        toast("보스 ${n}마리 처치 처리 완료")
+                    } else {
+                        toast("이름과 젠타임이 저장된 보스가 없어요")
+                    }
+                    updateStates()
+                    OverlayService.instance?.refreshNow()
+                }
+                .setNegativeButton("취소", null)
+                .show()
+        }
+        bh.addView(bt)
+        bh.addView(rb)
+        root.addView(bh)
         root.addView(
             label(
                 "이름과 젠타임(시간·분·초)을 넣으면 자동 저장돼요. 왼쪽을 체크한 보스만 게임 위에 표시돼요.",
@@ -283,13 +301,22 @@ class MainActivity : Activity() {
             val s = sf.text.toString().trim().toIntOrNull() ?: 0
             edit(i) { it.secs = h * 3600 + m * 60 + s }
         }
-        rt.addView(text("젠타임 "))
         rt.addView(hf)
-        rt.addView(text("시간 "))
+        rt.addView(text("시 "))
         rt.addView(mf)
         rt.addView(text("분 "))
         rt.addView(sf)
         rt.addView(text("초"))
+
+        // 오른쪽 끝: 이 보스 개별 알림
+        val sp = TextView(this)
+        sp.layoutParams = LinearLayout.LayoutParams(0, WC, 1f)
+        rt.addView(sp)
+        val al = CheckBox(this)
+        al.text = "알림"
+        al.isChecked = b.alarm
+        al.setOnCheckedChangeListener { _, on -> edit(i) { it.alarm = on } }
+        rt.addView(al)
 
         val r2 = row()
         val st = TextView(this)
@@ -302,6 +329,7 @@ class MainActivity : Activity() {
         k.text = "처치"
         k.setOnClickListener {
             if (Store.kill(this@MainActivity, i)) {
+                buzz(this@MainActivity, 60)
                 val bb = Store.load(this@MainActivity)[i]
                 toast("${bb.name} 처치! ${fmtDur(bb.secs)} 후 젠")
             } else {

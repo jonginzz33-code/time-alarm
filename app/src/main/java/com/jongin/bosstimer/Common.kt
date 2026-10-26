@@ -23,7 +23,8 @@ class Boss(
     var name: String = "",
     var secs: Int = 0,          // 젠타임 (초 단위)
     var spawn: Long = 0,
-    var show: Boolean = false
+    var show: Boolean = false,
+    var alarm: Boolean = true   // 이 보스 진동 알림 사용 여부
 )
 
 object Store {
@@ -42,7 +43,8 @@ object Store {
                     o.optString("name"),
                     secs,
                     o.optLong("spawn"),
-                    o.optBoolean("show")
+                    o.optBoolean("show"),
+                    o.optBoolean("alarm", true)
                 )
             }
         } catch (e: Exception) {
@@ -59,6 +61,7 @@ object Store {
                     .put("secs", b.secs)
                     .put("spawn", b.spawn)
                     .put("show", b.show)
+                    .put("alarm", b.alarm)
             )
         }
         p(c).edit().putString("bosses", a.toString()).apply()
@@ -72,6 +75,21 @@ object Store {
         b.spawn = nowSec() + b.secs.toLong()
         save(c, l)
         return true
+    }
+
+    /** 리붓: 이름과 젠타임이 저장된 모든 보스를 지금 처치한 것으로 처리. 처리한 보스 수를 돌려줌 */
+    fun killAll(c: Context): Int {
+        val l = load(c)
+        val now = nowSec()
+        var n = 0
+        for (b in l) {
+            if (b.name.isNotBlank() && b.secs > 0) {
+                b.spawn = now + b.secs
+                n++
+            }
+        }
+        save(c, l)
+        return n
     }
 
     fun reset(c: Context, i: Int) {
@@ -124,6 +142,9 @@ fun stateText(b: Boss, now: Long): String {
     return if (r > 0) "젠 ${fmtClock(b.spawn)} · 남음 ${fmtLeft(r)}"
     else "젠 ${fmtClock(b.spawn)} · 젠!"
 }
+
+/** 한 번 진동 (처치: 짧게, 알림: 길게) */
+fun buzz(c: Context, ms: Long) = vibrate(c, longArrayOf(0, ms))
 
 fun vibrate(c: Context, pattern: LongArray) {
     try {
