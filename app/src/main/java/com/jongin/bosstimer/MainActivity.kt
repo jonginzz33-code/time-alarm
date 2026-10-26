@@ -163,7 +163,7 @@ class MainActivity : Activity() {
         }
 
         val tg = Button(this)
-        tg.text = if (OverlayService.running) "게임 위 창 끄기" else "게임 위 창 켜기"
+        tg.text = if (OverlayService.running) "슬롯바 끄기" else "슬롯바 켜기"
         tg.setOnClickListener { toggleOverlay() }
         root.addView(tg)
 
@@ -182,12 +182,12 @@ class MainActivity : Activity() {
         root.addView(vr)
         root.addView(
             label(
-                "비워 두거나 0이면 그 알림은 꺼져요. 보스마다 젠타임 오른쪽 '알림'을 체크한 보스만 길게 한 번 울려요. 게임 위 창이 켜져 있어야 동작해요.",
+                "비워 두거나 0이면 그 알림은 꺼져요. 보스마다 젠타임 오른쪽 '알림'을 체크한 보스만 길게 한 번 울려요. 슬롯바가 켜져 있어야 동작해요.",
                 12f, 2
             )
         )
 
-        // 게임 위 창
+        // 슬롯바 설정
         root.addView(section("🪟 창설정"))
         seek("크기 배율 (글자·버튼)", 30, 100, Store.scale(this), "%") {
             Store.p(this@MainActivity).edit().putInt("scale", it).apply()
@@ -201,6 +201,24 @@ class MainActivity : Activity() {
             Store.p(this@MainActivity).edit().putInt("alpha", it).apply()
             OverlayService.instance?.applyStyle()
         }
+
+        // 슬롯바 이름 강조 시간
+        root.addView(label("✨ 이름 강조 시간", 15f, 14))
+        val hy = row()
+        hy.addView(text("🟨 노란색  "))
+        hy.addView(numField(Store.hlMin(this), 70, "분") {
+            Store.p(this@MainActivity).edit().putInt("hlMin", it).apply()
+        })
+        hy.addView(text("분 전부터"))
+        root.addView(hy)
+        val hr = row()
+        hr.addView(text("🟥 빨간 깜빡임  "))
+        hr.addView(numField(Store.hlSec(this), 70, "초") {
+            Store.p(this@MainActivity).edit().putInt("hlSec", it).apply()
+        })
+        hr.addView(text("초 전부터"))
+        root.addView(hr)
+        root.addView(label("비워 두거나 0이면 그 강조는 꺼져요. 슬롯바에 표시된 모든 보스에 적용돼요.", 12f, 2))
 
         // 보스 목록
         val bh = row()
@@ -237,14 +255,15 @@ class MainActivity : Activity() {
         root.addView(bh)
         root.addView(
             label(
-                "이름과 젠타임(시간·분·초)을 넣으면 자동 저장돼요. 왼쪽을 체크한 보스만 게임 위에 표시돼요.",
+                "이름과 젠타임(시간·분·초)을 넣으면 자동 저장돼요. 왼쪽을 체크한 것만 슬롯바에 표시돼요.",
                 12f, 2
             )
         )
         // 처음엔 5칸만 보이고, '보스 추가'로 한 칸씩 늘림 (최대 15칸). 이미 입력된 칸은 항상 보임
         val list = Store.load(this)
         val lastUsed = list.indexOfLast { it.name.isNotBlank() || it.secs > 0 }
-        var shown = maxOf(Store.visible(this), lastUsed + 1, 5).coerceAtMost(SLOTS)
+        // 앱을 다시 열면 입력된 칸까지만 보이고(최소 5칸), 비어 있는 추가 칸은 다시 숨김
+        var shown = maxOf(lastUsed + 1, 5).coerceAtMost(SLOTS)
         val bossBox = LinearLayout(this)
         bossBox.orientation = LinearLayout.VERTICAL
         root.addView(bossBox)
@@ -257,7 +276,6 @@ class MainActivity : Activity() {
             if (shown < SLOTS) {
                 addBossRow(bossBox, shown, Store.load(this@MainActivity)[shown])
                 shown++
-                Store.p(this@MainActivity).edit().putInt("visible", shown).apply()
                 add.text = "+ 보스 추가 ($shown/$SLOTS)"
                 if (shown >= SLOTS) add.isEnabled = false
             }

@@ -44,6 +44,8 @@ class OverlayService : Service() {
     private var sig = ""
     private var s = 0.5f
     private val cds = HashMap<Int, TextView>()
+    private val names = HashMap<Int, TextView>()
+    private val rows = HashMap<Int, LinearLayout>()
     private val fired = HashSet<String>()
 
     private val tick = object : Runnable {
@@ -68,7 +70,7 @@ class OverlayService : Service() {
         try {
             build()
         } catch (e: Exception) {
-            Toast.makeText(this, "게임 위 창을 열 수 없습니다. 권한을 확인하세요", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "슬롯바를 열 수 없습니다. 권한을 확인하세요", Toast.LENGTH_LONG).show()
             stopSelf()
             return
         }
@@ -250,6 +252,8 @@ class OverlayService : Service() {
     private fun fill(l: List<Boss>) {
         list.removeAllViews()
         cds.clear()
+        names.clear()
+        rows.clear()
         val want = l.withIndex().filter { it.value.show && it.value.name.isNotBlank() }
         if (want.isEmpty()) {
             val t = TextView(this)
@@ -294,6 +298,8 @@ class OverlayService : Service() {
             cd.typeface = Typeface.MONOSPACE
             cd.setPadding(px(4), 0, px(4), 0)
             cds[i] = cd
+            names[i] = nm
+            rows[i] = row
 
             val killBtn = chip("처치", 0xFFC0392B.toInt()) { kill(i) }
             killBtn.setOnLongClickListener {
@@ -335,20 +341,54 @@ class OverlayService : Service() {
 
     private fun updateCd(l: List<Boss>) {
         val now = nowSec()
+        val vm = Store.hlMin(this) * 60L       // 노란 강조 시작
+        val vs = Store.hlSec(this).toLong()    // 빨간 깜빡임 시작
         for ((i, tv) in cds) {
             val b = l[i]
+            val nm = names[i]
+            val row = rows[i]
+            var level = 0   // 0: 보통, 1: 분 전 구간(노랑), 2: 초 전 구간(빨강 깜빡임)
             if (b.spawn <= 0) {
                 tv.text = "--:--"
                 tv.setTextColor(Color.GRAY)
-                continue
-            }
-            val r = b.spawn - now
-            if (r <= 0) {
-                tv.text = "✅"
-                tv.setTextColor(0xFF4CAF50.toInt())
             } else {
-                tv.text = fmtLeft(r)
-                tv.setTextColor(if (r <= 60) 0xFFFFD54F.toInt() else Color.WHITE)
+                val r = b.spawn - now
+                if (r <= 0) {
+                    tv.text = "✅"
+                    tv.setTextColor(0xFF4CAF50.toInt())
+                } else {
+                    tv.text = fmtLeft(r)
+                    level = when {
+                        vs > 0 && r <= vs -> 2
+                        vm > 0 && r <= vm -> 1
+                        else -> 0
+                    }
+                    tv.setTextColor(
+                        when (level) {
+                            2 -> 0xFFFF5252.toInt()
+                            1 -> 0xFFFFD54F.toInt()
+                            else -> Color.WHITE
+                        }
+                    )
+                }
+            }
+            // 슬롯바에서 이름 강조 (알림 팝업 대신)
+            if (nm != null && row != null) {
+                when (level) {
+                    2 -> {
+                        nm.setTextColor(0xFFFF5252.toInt())
+                        val on = now % 2 == 0L
+                        row.setBackgroundColor(if (on) 0x66FF1744 else 0x22FF1744)
+                    }
+                    1 -> {
+                        nm.setTextColor(0xFFFFD54F.toInt())
+                        row.setBackgroundColor(0x33FFD54F)
+                    }
+                    else -> {
+                        nm.setTextColor(Color.WHITE)
+                        row.setBackgroundColor(Color.TRANSPARENT)
+                    }
+                }
             }
         }
     }
@@ -361,18 +401,18 @@ class OverlayService : Service() {
         for ((i, b) in l.withIndex()) {
             if (!b.alarm || b.name.isBlank() || b.spawn <= 0) continue
             val r = b.spawn - now
-            if (vm > 0) fire(i, b, "m", r, vm * 60L, "${b.name} ${vm}분 전")
-            if (vs > 0) fire(i, b, "s", r, vs.toLong(), "${b.name} ${vs}초 전")
+            if (vm > 0) fire(i, b, "m", r, vm * 60L)
+            if (vs > 0) fire(i, b, "s", r, vs.toLong())
         }
     }
 
-    private fun fire(i: Int, b: Boss, tag: String, r: Long, thr: Long, msg: String) {
+    /** 진동만 울림. 알림 팝업은 띄우지 않고 슬롯바에서 이름을 강조함 */
+    private fun fire(i: Int, b: Boss, tag: String, r: Long, thr: Long) {
         // 기준 시각을 막 지난 5초 안에서만 울림 (앱을 늦게 켰을 때 지난 알림이 한꺼번에 울리지 않게)
         if (r <= thr && r > thr - 5) {
             val key = "$i:${b.spawn}:$tag"
             if (fired.add(key)) {
                 buzz(this, 1500)
-                toast(msg)
             }
         }
     }

@@ -11,8 +11,8 @@ android {
         applicationId 'com.jongin.bosstimer'
         minSdk 24
         targetSdk 34
-        versionCode 5
-        versionName '5.0'
+        versionCode 6
+        versionName '6.0'
     }
 
     // 항상 같은 키로 서명해서, 다음 버전부터는 지우지 않고 바로 업데이트 설치 가능
