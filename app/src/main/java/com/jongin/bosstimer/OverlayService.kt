@@ -344,8 +344,8 @@ class OverlayService : Service() {
             }
             val r = b.spawn - now
             if (r <= 0) {
-                tv.text = "젠!"
-                tv.setTextColor(0xFFFF5252.toInt())
+                tv.text = "✅"
+                tv.setTextColor(0xFF4CAF50.toInt())
             } else {
                 tv.text = fmtLeft(r)
                 tv.setTextColor(if (r <= 60) 0xFFFFD54F.toInt() else Color.WHITE)

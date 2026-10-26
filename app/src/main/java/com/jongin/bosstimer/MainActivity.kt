@@ -188,7 +188,7 @@ class MainActivity : Activity() {
         )
 
         // 게임 위 창
-        root.addView(section("🪟 게임 위 창"))
+        root.addView(section("🪟 창설정"))
         seek("크기 배율 (글자·버튼)", 30, 100, Store.scale(this), "%") {
             Store.p(this@MainActivity).edit().putInt("scale", it).apply()
             OverlayService.instance?.rebuildAll()
@@ -204,10 +204,17 @@ class MainActivity : Activity() {
 
         // 보스 목록
         val bh = row()
-        val bt = section("👹 보스 목록 (15칸)")
+        val bt = section("👹 목록")
         bt.layoutParams = LinearLayout.LayoutParams(0, WC, 1f)
         val rb = Button(this)
         rb.text = "리붓"
+        rb.setTextColor(0xFFFFFFFF.toInt())
+        rb.setTypeface(null, Typeface.BOLD)
+        val rbg = GradientDrawable()
+        rbg.setColor(0xFFD32F2F.toInt())
+        rbg.cornerRadius = dp(8).toFloat()
+        rb.background = rbg
+        rb.setPadding(dp(18), dp(8), dp(18), dp(8))
         rb.setOnClickListener {
             AlertDialog.Builder(this)
                 .setMessage("저장된 모든 보스를 지금 처치한 것으로 할까요?")
@@ -234,8 +241,28 @@ class MainActivity : Activity() {
                 12f, 2
             )
         )
+        // 처음엔 5칸만 보이고, '보스 추가'로 한 칸씩 늘림 (최대 15칸). 이미 입력된 칸은 항상 보임
         val list = Store.load(this)
-        for (i in 0 until SLOTS) addBossRow(i, list[i])
+        val lastUsed = list.indexOfLast { it.name.isNotBlank() || it.secs > 0 }
+        var shown = maxOf(Store.visible(this), lastUsed + 1, 5).coerceAtMost(SLOTS)
+        val bossBox = LinearLayout(this)
+        bossBox.orientation = LinearLayout.VERTICAL
+        root.addView(bossBox)
+        for (i in 0 until shown) addBossRow(bossBox, i, list[i])
+
+        val add = Button(this)
+        add.text = "+ 보스 추가 ($shown/$SLOTS)"
+        if (shown >= SLOTS) add.isEnabled = false
+        add.setOnClickListener {
+            if (shown < SLOTS) {
+                addBossRow(bossBox, shown, Store.load(this@MainActivity)[shown])
+                shown++
+                Store.p(this@MainActivity).edit().putInt("visible", shown).apply()
+                add.text = "+ 보스 추가 ($shown/$SLOTS)"
+                if (shown >= SLOTS) add.isEnabled = false
+            }
+        }
+        root.addView(add)
 
         val all = Button(this)
         all.text = "전체 타이머 초기화"
@@ -257,7 +284,7 @@ class MainActivity : Activity() {
         updateStates()
     }
 
-    private fun addBossRow(i: Int, b: Boss) {
+    private fun addBossRow(parent: LinearLayout, i: Int, b: Boss) {
         val box = LinearLayout(this)
         box.orientation = LinearLayout.VERTICAL
         box.setPadding(dp(6), dp(4), dp(6), dp(4))
@@ -354,7 +381,7 @@ class MainActivity : Activity() {
         box.addView(r1)
         box.addView(rt)
         box.addView(r2)
-        root.addView(box)
+        parent.addView(box)
     }
 
     private fun updateStates() {

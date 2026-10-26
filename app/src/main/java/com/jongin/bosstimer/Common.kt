@@ -102,6 +102,7 @@ object Store {
     fun vibMin(c: Context): Int = p(c).getInt("vibMin", 5)
     fun vibSec(c: Context): Int = p(c).getInt("vibSec", 30)
     fun scale(c: Context): Int = p(c).getInt("scale", 50)
+    fun visible(c: Context): Int = p(c).getInt("visible", 5)
     fun width(c: Context): Int = p(c).getInt("width", 150)
     fun alpha(c: Context): Int = p(c).getInt("alpha", 85)
     fun x(c: Context): Int = p(c).getInt("x", 20)
@@ -140,7 +141,7 @@ fun stateText(b: Boss, now: Long): String {
     if (b.spawn <= 0) return "기록 없음"
     val r = b.spawn - now
     return if (r > 0) "젠 ${fmtClock(b.spawn)} · 남음 ${fmtLeft(r)}"
-    else "젠 ${fmtClock(b.spawn)} · 젠!"
+    else "젠 ${fmtClock(b.spawn)} · ✅"
 }
 
 /** 한 번 진동 (처치: 짧게, 알림: 길게) */
