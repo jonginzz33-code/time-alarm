@@ -28,12 +28,12 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: BossTimer-apk
+          name: TimeAlarm-apk
           path: app/build/outputs/apk/debug/app-debug.apk
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: 보스 타이머 빌드 ${{ github.run_number }}
+          name: 시간알림 빌드 ${{ github.run_number }}
           files: app/build/outputs/apk/debug/app-debug.apk

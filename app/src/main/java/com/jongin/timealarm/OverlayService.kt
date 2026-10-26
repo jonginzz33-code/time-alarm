@@ -1,4 +1,4 @@
-package com.jongin.bosstimer
+package com.jongin.timealarm
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -91,11 +91,11 @@ class OverlayService : Service() {
     }
 
     private fun startFg() {
-        val ch = "boss_overlay"
+        val ch = "timer_overlay"
         if (Build.VERSION.SDK_INT >= 26) {
             val nm = getSystemService(NotificationManager::class.java)
             nm.createNotificationChannel(
-                NotificationChannel(ch, "보스 타이머", NotificationManager.IMPORTANCE_LOW)
+                NotificationChannel(ch, "시간알림", NotificationManager.IMPORTANCE_LOW)
             )
         }
         val pi = PendingIntent.getActivity(
@@ -249,15 +249,15 @@ class OverlayService : Service() {
         Toast.makeText(this, t, Toast.LENGTH_SHORT).show()
     }
 
-    private fun fill(l: List<Boss>) {
+    private fun fill(l: List<Slot>) {
         list.removeAllViews()
         cds.clear()
         names.clear()
         rows.clear()
-        val want = l.withIndex().filter { it.value.show && it.value.name.isNotBlank() }
+        val want = ordered(l)
         if (want.isEmpty()) {
             val t = TextView(this)
-            t.text = "앱에서 보스를 체크하세요"
+            t.text = "앱에서 항목을 체크하세요"
             t.setTextColor(0xFFAAAAAA.toInt())
             t.textSize = 12f * s
             t.setPadding(px(4), px(4), px(4), px(4))
@@ -283,7 +283,7 @@ class OverlayService : Service() {
             nm.ellipsize = TextUtils.TruncateAt.END
 
             val info = TextView(this)
-            info.text = if (b.spawn > 0) "${fmtClock(b.spawn)} 젠" else fmtDur(b.secs)
+            info.text = if (b.due > 0) "${fmtClock(b.due)} 완료" else fmtDur(b.secs)
             info.setTextColor(0xFFAAAAAA.toInt())
             info.textSize = 11f * s
             info.maxLines = 1
@@ -301,8 +301,8 @@ class OverlayService : Service() {
             names[i] = nm
             rows[i] = row
 
-            val killBtn = chip("처치", 0xFFC0392B.toInt()) { kill(i) }
-            killBtn.setOnLongClickListener {
+            val startBtn = chip("시작", 0xFFC0392B.toInt()) { startTimer(i) }
+            startBtn.setOnLongClickListener {
                 Store.reset(this@OverlayService, i)
                 toast("${b.name} 리셋")
                 onTick()
@@ -311,18 +311,33 @@ class OverlayService : Service() {
 
             row.addView(left)
             row.addView(cd)
-            row.addView(killBtn)
+            row.addView(startBtn)
             list.addView(row)
         }
     }
 
-    private fun kill(i: Int) {
-        if (Store.kill(this, i)) {
+    /**
+     * 슬롯바 표시 순서: ① 완료된 것(✅)  ② 남은 시간이 적은 순  ③ 기록 없음
+     */
+    private fun ordered(l: List<Slot>): List<IndexedValue<Slot>> {
+        val now = nowSec()
+        fun rank(b: Slot): Int = when {
+            b.due <= 0 -> 2
+            b.due <= now -> 0
+            else -> 1
+        }
+        return l.withIndex()
+            .filter { it.value.show && it.value.name.isNotBlank() }
+            .sortedWith(compareBy<IndexedValue<Slot>>({ rank(it.value) }, { it.value.due }, { it.index }))
+    }
+
+    private fun startTimer(i: Int) {
+        if (Store.startTimer(this, i)) {
             buzz(this, 60)
             val b = Store.load(this)[i]
-            toast("${b.name} 처치! ${fmtDur(b.secs)} 후 젠")
+            toast("${b.name} 시작! ${fmtDur(b.secs)} 후 완료")
         } else {
-            toast("젠타임이 없습니다. 앱에서 입력하세요")
+            toast("주기가 없습니다. 앱에서 입력하세요")
         }
         onTick()
     }
@@ -330,7 +345,9 @@ class OverlayService : Service() {
     private fun onTick() {
         if (!added) return
         val l = Store.load(this)
-        val sg = l.joinToString("|") { "${it.name},${it.secs},${it.spawn},${it.show}" }
+        // 순서가 바뀌면(시작, 완료 등) 슬롯바를 다시 그림
+        val order = ordered(l).joinToString(",") { it.index.toString() }
+        val sg = l.joinToString("|") { "${it.name},${it.secs},${it.due},${it.show}" } + "#" + order
         if (sg != sig) {
             sig = sg
             fill(l)
@@ -339,7 +356,7 @@ class OverlayService : Service() {
         checkAlerts(l)
     }
 
-    private fun updateCd(l: List<Boss>) {
+    private fun updateCd(l: List<Slot>) {
         val now = nowSec()
         val vm = Store.hlMin(this) * 60L       // 노란 강조 시작
         val vs = Store.hlSec(this).toLong()    // 빨간 깜빡임 시작
@@ -348,11 +365,11 @@ class OverlayService : Service() {
             val nm = names[i]
             val row = rows[i]
             var level = 0   // 0: 보통, 1: 분 전 구간(노랑), 2: 초 전 구간(빨강 깜빡임)
-            if (b.spawn <= 0) {
+            if (b.due <= 0) {
                 tv.text = "--:--"
                 tv.setTextColor(Color.GRAY)
             } else {
-                val r = b.spawn - now
+                val r = b.due - now
                 if (r <= 0) {
                     tv.text = "✅"
                     tv.setTextColor(0xFF4CAF50.toInt())
@@ -393,24 +410,24 @@ class OverlayService : Service() {
         }
     }
 
-    /** '알림' 체크한 보스만, 설정한 분 전 / 초 전에 길게 한 번 진동 */
-    private fun checkAlerts(l: List<Boss>) {
+    /** '알림' 체크한 항목만, 설정한 분 전 / 초 전에 길게 한 번 진동 */
+    private fun checkAlerts(l: List<Slot>) {
         val now = nowSec()
         val vm = Store.vibMin(this)
         val vs = Store.vibSec(this)
         for ((i, b) in l.withIndex()) {
-            if (!b.alarm || b.name.isBlank() || b.spawn <= 0) continue
-            val r = b.spawn - now
+            if (!b.alarm || b.name.isBlank() || b.due <= 0) continue
+            val r = b.due - now
             if (vm > 0) fire(i, b, "m", r, vm * 60L)
             if (vs > 0) fire(i, b, "s", r, vs.toLong())
         }
     }
 
     /** 진동만 울림. 알림 팝업은 띄우지 않고 슬롯바에서 이름을 강조함 */
-    private fun fire(i: Int, b: Boss, tag: String, r: Long, thr: Long) {
+    private fun fire(i: Int, b: Slot, tag: String, r: Long, thr: Long) {
         // 기준 시각을 막 지난 5초 안에서만 울림 (앱을 늦게 켰을 때 지난 알림이 한꺼번에 울리지 않게)
         if (r <= thr && r > thr - 5) {
-            val key = "$i:${b.spawn}:$tag"
+            val key = "$i:${b.due}:$tag"
             if (fired.add(key)) {
                 buzz(this, 1500)
             }

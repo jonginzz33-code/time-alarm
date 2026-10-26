@@ -1,4 +1,4 @@
-package com.jongin.bosstimer
+package com.jongin.timealarm
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -19,30 +19,30 @@ fun Context.dp(v: Int): Int = dp(v.toFloat())
 
 fun nowSec(): Long = System.currentTimeMillis() / 1000
 
-class Boss(
+class Slot(
     var name: String = "",
-    var secs: Int = 0,          // 젠타임 (초 단위)
-    var spawn: Long = 0,
+    var secs: Int = 0,          // 주기 (초 단위)
+    var due: Long = 0,
     var show: Boolean = false,
-    var alarm: Boolean = true   // 이 보스 진동 알림 사용 여부
+    var alarm: Boolean = true   // 이 항목 진동 알림 사용 여부
 )
 
 object Store {
-    fun p(c: Context): SharedPreferences = c.getSharedPreferences("boss_local", Context.MODE_PRIVATE)
+    fun p(c: Context): SharedPreferences = c.getSharedPreferences("timealarm_local", Context.MODE_PRIVATE)
 
-    fun load(c: Context): MutableList<Boss> {
-        val out = MutableList(SLOTS) { Boss() }
-        val s = p(c).getString("bosses", null) ?: return out
+    fun load(c: Context): MutableList<Slot> {
+        val out = MutableList(SLOTS) { Slot() }
+        val s = p(c).getString("slots", null) ?: return out
         try {
             val a = JSONArray(s)
             for (i in 0 until minOf(a.length(), SLOTS)) {
                 val o = a.getJSONObject(i)
                 // 예전 버전(분 단위) 데이터도 그대로 불러오기
                 val secs = if (o.has("secs")) o.optInt("secs") else o.optInt("minutes") * 60
-                out[i] = Boss(
+                out[i] = Slot(
                     o.optString("name"),
                     secs,
-                    o.optLong("spawn"),
+                    o.optLong("due"),
                     o.optBoolean("show"),
                     o.optBoolean("alarm", true)
                 )
@@ -52,39 +52,39 @@ object Store {
         return out
     }
 
-    fun save(c: Context, list: List<Boss>) {
+    fun save(c: Context, list: List<Slot>) {
         val a = JSONArray()
         for (b in list) {
             a.put(
                 JSONObject()
                     .put("name", b.name)
                     .put("secs", b.secs)
-                    .put("spawn", b.spawn)
+                    .put("due", b.due)
                     .put("show", b.show)
                     .put("alarm", b.alarm)
             )
         }
-        p(c).edit().putString("bosses", a.toString()).apply()
+        p(c).edit().putString("slots", a.toString()).apply()
     }
 
-    /** 처치: 지금 시각 + 젠타임(초)을 다음 젠 시각으로 저장 */
-    fun kill(c: Context, i: Int): Boolean {
+    /** 시작: 지금 시각 + 주기(초)를 다음 완료 시각으로 저장 */
+    fun startTimer(c: Context, i: Int): Boolean {
         val l = load(c)
         val b = l[i]
         if (b.name.isBlank() || b.secs <= 0) return false
-        b.spawn = nowSec() + b.secs.toLong()
+        b.due = nowSec() + b.secs.toLong()
         save(c, l)
         return true
     }
 
-    /** 리붓: 이름과 젠타임이 저장된 모든 보스를 지금 처치한 것으로 처리. 처리한 보스 수를 돌려줌 */
-    fun killAll(c: Context): Int {
+    /** 리붓: 이름과 주기가 저장된 모든 항목을 지금 시작한 것으로 처리. 처리한 항목 수를 돌려줌 */
+    fun startAll(c: Context): Int {
         val l = load(c)
         val now = nowSec()
         var n = 0
         for (b in l) {
             if (b.name.isNotBlank() && b.secs > 0) {
-                b.spawn = now + b.secs
+                b.due = now + b.secs
                 n++
             }
         }
@@ -94,7 +94,7 @@ object Store {
 
     fun reset(c: Context, i: Int) {
         val l = load(c)
-        l[i].spawn = 0
+        l[i].due = 0
         save(c, l)
     }
 
@@ -118,7 +118,7 @@ fun fmtLeft(r: Long): String {
     else String.format(Locale.US, "%02d:%02d", m, s)
 }
 
-/** 젠타임을 "5시간 33분 30초"처럼 표시 (0인 단위는 생략) */
+/** 주기를 "5시간 33분 30초"처럼 표시 (0인 단위는 생략) */
 fun fmtDur(sec: Int): String {
     if (sec <= 0) return "0초"
     val h = sec / 3600
@@ -138,14 +138,14 @@ fun fmtClock(ts: Long): String {
     else SimpleDateFormat("M/d HH:mm:ss", Locale.KOREA).format(d)
 }
 
-fun stateText(b: Boss, now: Long): String {
-    if (b.spawn <= 0) return "기록 없음"
-    val r = b.spawn - now
-    return if (r > 0) "젠 ${fmtClock(b.spawn)} · 남음 ${fmtLeft(r)}"
-    else "젠 ${fmtClock(b.spawn)} · ✅"
+fun stateText(b: Slot, now: Long): String {
+    if (b.due <= 0) return "기록 없음"
+    val r = b.due - now
+    return if (r > 0) "완료 ${fmtClock(b.due)} · 남음 ${fmtLeft(r)}"
+    else "완료 ${fmtClock(b.due)} · ✅"
 }
 
-/** 한 번 진동 (처치: 짧게, 알림: 길게) */
+/** 한 번 진동 (시작: 짧게, 알림: 길게) */
 fun buzz(c: Context, ms: Long) = vibrate(c, longArrayOf(0, ms))
 
 fun vibrate(c: Context, pattern: LongArray) {

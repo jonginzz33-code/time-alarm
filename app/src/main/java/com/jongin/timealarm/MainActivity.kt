@@ -1,4 +1,4 @@
-package com.jongin.bosstimer
+package com.jongin.timealarm
 
 import android.Manifest
 import android.app.Activity
@@ -133,7 +133,7 @@ class MainActivity : Activity() {
         root.addView(sb)
     }
 
-    private fun edit(i: Int, f: (Boss) -> Unit) {
+    private fun edit(i: Int, f: (Slot) -> Unit) {
         val l = Store.load(this)
         f(l[i])
         Store.save(this, l)
@@ -182,7 +182,7 @@ class MainActivity : Activity() {
         root.addView(vr)
         root.addView(
             label(
-                "비워 두거나 0이면 그 알림은 꺼져요. 보스마다 젠타임 오른쪽 '알림'을 체크한 보스만 길게 한 번 울려요. 슬롯바가 켜져 있어야 동작해요.",
+                "비워 두거나 0이면 그 알림은 꺼져요. 항목마다 주기 오른쪽 '알림'을 체크한 항목만 길게 한 번 울려요. 슬롯바가 켜져 있어야 동작해요.",
                 12f, 2
             )
         )
@@ -218,11 +218,11 @@ class MainActivity : Activity() {
         })
         hr.addView(text("초 전부터"))
         root.addView(hr)
-        root.addView(label("비워 두거나 0이면 그 강조는 꺼져요. 슬롯바에 표시된 모든 보스에 적용돼요.", 12f, 2))
+        root.addView(label("비워 두거나 0이면 그 강조는 꺼져요. 슬롯바에 표시된 모든 항목에 적용돼요.", 12f, 2))
 
-        // 보스 목록
+        // 항목 목록
         val bh = row()
-        val bt = section("👹 목록")
+        val bt = section("📋 목록")
         bt.layoutParams = LinearLayout.LayoutParams(0, WC, 1f)
         val rb = Button(this)
         rb.text = "리붓"
@@ -235,14 +235,14 @@ class MainActivity : Activity() {
         rb.setPadding(dp(18), dp(8), dp(18), dp(8))
         rb.setOnClickListener {
             AlertDialog.Builder(this)
-                .setMessage("저장된 모든 보스를 지금 처치한 것으로 할까요?")
+                .setMessage("저장된 모든 항목의 타이머를 지금 시작할까요?")
                 .setPositiveButton("리붓") { _, _ ->
-                    val n = Store.killAll(this@MainActivity)
+                    val n = Store.startAll(this@MainActivity)
                     if (n > 0) {
                         buzz(this@MainActivity, 60)
-                        toast("보스 ${n}마리 처치 처리 완료")
+                        toast("${n}개 타이머 시작")
                     } else {
-                        toast("이름과 젠타임이 저장된 보스가 없어요")
+                        toast("이름과 주기가 저장된 항목이 없어요")
                     }
                     updateStates()
                     OverlayService.instance?.refreshNow()
@@ -255,28 +255,28 @@ class MainActivity : Activity() {
         root.addView(bh)
         root.addView(
             label(
-                "이름과 젠타임(시간·분·초)을 넣으면 자동 저장돼요. 왼쪽을 체크한 것만 슬롯바에 표시돼요.",
+                "이름과 주기(시간·분·초)를 넣으면 자동 저장돼요. 왼쪽을 체크한 것만 슬롯바에 표시돼요.",
                 12f, 2
             )
         )
-        // 처음엔 5칸만 보이고, '보스 추가'로 한 칸씩 늘림 (최대 15칸). 이미 입력된 칸은 항상 보임
+        // 처음엔 5칸만 보이고, '추가'로 한 칸씩 늘림 (최대 15칸). 이미 입력된 칸은 항상 보임
         val list = Store.load(this)
         val lastUsed = list.indexOfLast { it.name.isNotBlank() || it.secs > 0 }
         // 앱을 다시 열면 입력된 칸까지만 보이고(최소 5칸), 비어 있는 추가 칸은 다시 숨김
         var shown = maxOf(lastUsed + 1, 5).coerceAtMost(SLOTS)
-        val bossBox = LinearLayout(this)
-        bossBox.orientation = LinearLayout.VERTICAL
-        root.addView(bossBox)
-        for (i in 0 until shown) addBossRow(bossBox, i, list[i])
+        val slotBox = LinearLayout(this)
+        slotBox.orientation = LinearLayout.VERTICAL
+        root.addView(slotBox)
+        for (i in 0 until shown) addSlotRow(slotBox, i, list[i])
 
         val add = Button(this)
-        add.text = "+ 보스 추가 ($shown/$SLOTS)"
+        add.text = "+ 추가 ($shown/$SLOTS)"
         if (shown >= SLOTS) add.isEnabled = false
         add.setOnClickListener {
             if (shown < SLOTS) {
-                addBossRow(bossBox, shown, Store.load(this@MainActivity)[shown])
+                addSlotRow(slotBox, shown, Store.load(this@MainActivity)[shown])
                 shown++
-                add.text = "+ 보스 추가 ($shown/$SLOTS)"
+                add.text = "+ 추가 ($shown/$SLOTS)"
                 if (shown >= SLOTS) add.isEnabled = false
             }
         }
@@ -286,10 +286,10 @@ class MainActivity : Activity() {
         all.text = "전체 타이머 초기화"
         all.setOnClickListener {
             AlertDialog.Builder(this)
-                .setMessage("모든 보스의 타이머를 초기화할까요?\n(이름과 젠타임은 그대로 남아요)")
+                .setMessage("모든 항목의 타이머를 초기화할까요?\n(이름과 주기는 그대로 남아요)")
                 .setPositiveButton("초기화") { _, _ ->
                     val l = Store.load(this@MainActivity)
-                    for (b in l) b.spawn = 0
+                    for (b in l) b.due = 0
                     Store.save(this@MainActivity, l)
                     updateStates()
                     OverlayService.instance?.refreshNow()
@@ -302,7 +302,7 @@ class MainActivity : Activity() {
         updateStates()
     }
 
-    private fun addBossRow(parent: LinearLayout, i: Int, b: Boss) {
+    private fun addSlotRow(parent: LinearLayout, i: Int, b: Slot) {
         val box = LinearLayout(this)
         box.orientation = LinearLayout.VERTICAL
         box.setPadding(dp(6), dp(4), dp(6), dp(4))
@@ -323,7 +323,7 @@ class MainActivity : Activity() {
         num.setPadding(0, 0, dp(4), 0)
 
         val name = EditText(this)
-        name.hint = "보스 이름"
+        name.hint = "이름"
         name.setSingleLine()
         name.setText(b.name)
         name.layoutParams = LinearLayout.LayoutParams(0, WC, 1f)
@@ -333,7 +333,7 @@ class MainActivity : Activity() {
         r1.addView(num)
         r1.addView(name)
 
-        // 젠타임: 시 / 분 / 초
+        // 주기: 시 / 분 / 초
         val rt = row()
         rt.setPadding(dp(8), 0, 0, 0)
         var upd: () -> Unit = {}
@@ -353,7 +353,7 @@ class MainActivity : Activity() {
         rt.addView(sf)
         rt.addView(text("초"))
 
-        // 오른쪽 끝: 이 보스 개별 알림
+        // 오른쪽 끝: 이 항목 개별 알림
         val sp = TextView(this)
         sp.layoutParams = LinearLayout.LayoutParams(0, WC, 1f)
         rt.addView(sp)
@@ -371,14 +371,14 @@ class MainActivity : Activity() {
         states[i] = st
 
         val k = Button(this)
-        k.text = "처치"
+        k.text = "시작"
         k.setOnClickListener {
-            if (Store.kill(this@MainActivity, i)) {
+            if (Store.startTimer(this@MainActivity, i)) {
                 buzz(this@MainActivity, 60)
                 val bb = Store.load(this@MainActivity)[i]
-                toast("${bb.name} 처치! ${fmtDur(bb.secs)} 후 젠")
+                toast("${bb.name} 시작! ${fmtDur(bb.secs)} 후 완료")
             } else {
-                toast("이름과 젠타임을 먼저 입력하세요")
+                toast("이름과 주기를 먼저 입력하세요")
             }
             updateStates()
             OverlayService.instance?.refreshNow()

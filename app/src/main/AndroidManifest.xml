@@ -29,7 +29,7 @@
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="game boss timer overlay" />
+                android:value="floating timer overlay" />
         </service>
     </application>
 </manifest>
